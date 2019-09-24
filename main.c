@@ -11,7 +11,7 @@
 #include <thrift/c_glib/transport/thrift_transport.h>
 
 
-int test_exists(THBaseServiceIf *client, const gchar *tablename)
+int hclient_exists(THBaseServiceIf *client, const gchar *tablename)
 {
   GByteArray *table = NULL ;
   TGet *tget = NULL ;
@@ -20,7 +20,7 @@ int test_exists(THBaseServiceIf *client, const gchar *tablename)
   GError *error = NULL;
 
 
-  printf("testing 'exists' command for talbe '%s'...\n",tablename);
+  printf("testing 'exists' command for talbe '%s'*******\n",tablename);
 
   tget = g_object_new(TYPE_T_GET,NULL);
 
@@ -47,7 +47,8 @@ int test_exists(THBaseServiceIf *client, const gchar *tablename)
   return 0;
 }
 
-int test_get(THBaseServiceIf *client, const gchar *tablename)
+int hclient_get(THBaseServiceIf *client, const gchar *tablename, const gchar *row, 
+                const gchar *cf, gchar *val)
 {
   GByteArray *table = NULL ;
   TGet *tget = NULL ;
@@ -55,15 +56,23 @@ int test_get(THBaseServiceIf *client, const gchar *tablename)
   TIOError *io = NULL;
   GError *error = NULL;
   TResult *result= NULL;
-  gchar *rno = "no-001001";
 
 
-  printf("testing 'get' command for talbe '%s'...\n",tablename);
+  printf("testing 'get' command for talbe '%s'*******\n",tablename);
 
   // construct TGet
   tget = g_object_new(TYPE_T_GET,NULL);
   tget->row = g_byte_array_new();
-  g_byte_array_append(tget->row,(guint8*)rno,strlen(rno));
+  g_byte_array_append(tget->row,(guint8*)row,strlen(row));
+
+  // construct TColumn
+  if (cf && strlen(cf)>0) {
+    TColumn *column = g_object_new(TYPE_T_COLUMN,NULL);
+    column->family = g_byte_array_new();
+    g_byte_array_append(column->family,(guint8*)cf,strlen(cf));
+    tget->__isset_columns = TRUE;
+    g_ptr_array_add(tget->columns,column);
+  }
 
   // construct table
   table= g_byte_array_new();
@@ -78,11 +87,19 @@ int test_get(THBaseServiceIf *client, const gchar *tablename)
            error?error->message:"n/A",io?io->message:"N/a");
   }
   else {
-    printf("row: %s\n",result->row->data);
+    printf("row: %s\n",result->__isset_row?(gchar*)result->row->data:"none");
 
     for (int i=0;i<result->columnValues->len;i++) {
       TColumnValue *pcol = result->columnValues->pdata[i];
-      printf("col family '%s', value '%s'\n",(char*)pcol->family->data,(char*)pcol->value->data);
+      printf("col family '%s'[%d], value '%s'[%d], qualifier '%s'\n",
+             (gchar*)pcol->family->data,pcol->family->len,
+             (gchar*)pcol->value->data,pcol->value->len,
+             (gchar*)pcol->qualifier->data);
+
+      if (val) {
+        strncpy(val,(gpointer)pcol->value->data,pcol->value->len);
+        val[pcol->value->len] = '\0';
+      }
     }
 
     printf("success!\n");
@@ -91,33 +108,41 @@ int test_get(THBaseServiceIf *client, const gchar *tablename)
   g_byte_array_unref(table);
   g_object_unref(tget);
   g_object_unref(result);
-  g_object_unref(io);
+  if (G_IS_OBJECT(io))
+    g_object_unref(io);
 
   return 0;
 }
 
-int test_put(THBaseServiceIf *client, const gchar *tablename, 
-             const gchar *cf, const gchar *val)
+int hclient_put(THBaseServiceIf *client, const gchar *tablename, 
+             const gchar *row, const gchar *cf, const gchar *val)
 {
   GByteArray *table = NULL ;
   TPut *tput = NULL ;
+  TColumnValue *cval = NULL;
   gboolean ret = FALSE;
   TIOError *io = NULL;
   GError *error = NULL;
-  gchar *rno = "no-001001";
 
 
-  printf("testing 'put' command for talbe '%s'...\n",tablename);
+  printf("testing 'put' command for talbe '%s'*******\n",tablename);
 
   // construct TPut
   tput = g_object_new(TYPE_T_PUT,NULL);
   tput->row = g_byte_array_new();
-  g_byte_array_append(tput->row,(guint8*)rno,strlen(rno));
-#if 0
-  tput->columnValues = g_ptr_array_new();
-  g_ptr_array_add(tput->columnValues,(gpointer)cf);
-  g_ptr_array_add(tput->columnValues,(gpointer)val);
-#endif
+  g_byte_array_append(tput->row,(guint8*)row,strlen(row));
+
+  // columns
+  cval = g_object_new(TYPE_T_COLUMN_VALUE,NULL);
+  // family
+  cval->family = g_byte_array_new();
+  g_byte_array_append(cval->family,(guint8*)cf,strlen(cf));
+  // value
+  cval->value = g_byte_array_new();
+  g_byte_array_append(cval->value,(guint8*)val,strlen(val));
+  // qualifier
+  cval->qualifier = NULL;
+  g_ptr_array_add(tput->columnValues,(gpointer)cval);
 
   // construct table
   table= g_byte_array_new();
@@ -134,7 +159,59 @@ int test_put(THBaseServiceIf *client, const gchar *tablename,
 
   g_byte_array_unref(table);
   g_object_unref(tput);
-  g_object_unref(io);
+  if (G_IS_OBJECT(io))
+    g_object_unref(io);
+  if (G_IS_OBJECT(cval))
+    g_object_unref(cval);
+
+  return 0;
+}
+
+int hclient_delete(THBaseServiceIf *client, const gchar *tablename, 
+                const gchar *row, const gchar *cf)
+{
+  GByteArray *table = NULL ;
+  TDelete *tdel = NULL ;
+  TColumn *cval = NULL;
+  gboolean ret = FALSE;
+  TIOError *io = NULL;
+  GError *error = NULL;
+
+
+  printf("testing 'delete' command for talbe '%s'*******\n",tablename);
+
+  // construct TDelete
+  tdel = g_object_new(TYPE_T_DELETE,NULL);
+  tdel->row = g_byte_array_new();
+  g_byte_array_append(tdel->row,(guint8*)row,strlen(row));
+
+  // columns
+  if (cf && strlen(cf)>0) {
+    cval = g_object_new(TYPE_T_COLUMN,NULL);
+    // family
+    cval->family = g_byte_array_new();
+    g_byte_array_append(cval->family,(guint8*)cf,strlen(cf));
+    tdel->__isset_columns = TRUE;
+    g_ptr_array_add(tdel->columns,(gpointer)cval);
+  }
+
+  // construct table
+  table= g_byte_array_new();
+  g_byte_array_append(table,(guint8*)tablename,strlen(tablename));
+
+  ret = t_h_base_service_client_delete_single(client,table,tdel,&io,&error);  
+  if (ret==FALSE) {
+    printf("client delete fail(%d): %s (%s)\n",error?error->code:-1,
+           error?error->message:"n/A",io?io->message:"N/a");
+  }
+  else {
+    printf("success!\n");
+  }
+
+  g_byte_array_unref(table);
+  g_object_unref(tdel);
+  if (G_IS_OBJECT(io))
+    g_object_unref(io);
 
   return 0;
 }
@@ -147,6 +224,7 @@ int test_t_h_base_service_client()
   ThriftTransport *transport = NULL;
   gchar *host = "127.0.0.1";
   gint port = 9090;
+  gchar tmp[256] = "";
   
 
   socket = g_object_new(THRIFT_TYPE_SOCKET,"hostname",host,
@@ -173,17 +251,35 @@ int test_t_h_base_service_client()
   /*
    * case 1: 
    */
-  test_exists(client,"user2");
+  hclient_exists(client,"user2");
 
   /*
    * case 2: 
    */
-  //test_get(client,"user1");
+  hclient_get(client,"user1","no-001001","name",tmp);
+  printf("name: %s\n",tmp);
+  hclient_get(client,"user1","no-001001","age",tmp);
+  printf("age: %s\n",tmp);
 
   /*
    * case 3: 
    */
-  test_put(client,"user1","name","JOey");
+  hclient_put(client,"user1","no-001001","name","JOey");
+  hclient_put(client,"user1","no-001001","age","33");
+  hclient_put(client,"user1","no-001002","name","顺风");
+  hclient_put(client,"user1","no-001002","age","37");
+  hclient_put(client,"user1","no-001002","sex","男");
+
+  /*
+   * 
+   */
+  hclient_get(client,"user1","no-001002","sex",tmp);
+  printf("sex: %s\n",tmp);
+
+  /*
+   * case 4:
+   */
+  hclient_delete(client,"user1","no-001002","");
 
 __done:
   g_object_unref(client);
