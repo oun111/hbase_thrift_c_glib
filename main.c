@@ -1,15 +1,18 @@
 #include "hclient.h"
-
+#include <sys/inotify.h>
+#include <sys/stat.h>
+#include <aio.h>
+#include <unistd.h>
+#include <errno.h>
 
 int test_t_h_base_service_client()
 {
   struct hbase_client_s client ;
-  gchar *host = "127.0.0.1";
-  gint port = 9090;
-  gchar tmp[256] = "";
+  const char *host = "127.0.0.1";
+  char tmp[256] = "";
   
 
-  if (hclient_init(&client,host,port)) {
+  if (hclient_init(&client,host,-1)) {
     goto __done ;
   }
 

@@ -2,8 +2,9 @@
 #include "hclient.h"
 
 
-int hclient_init(hclient_t cln, const char *host, int port)
+int hclient_init(hclient_t cln, const char *host, const int cport)
 {
+  int port = !(cport>0&&cport<65535)?9090:cport ;
 
   cln->socket = g_object_new(THRIFT_TYPE_SOCKET,"hostname",host,
                              "port",port,NULL);

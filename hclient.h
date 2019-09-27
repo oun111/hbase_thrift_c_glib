@@ -28,7 +28,7 @@ typedef struct hbase_client_s* hclient_t ;
 
 
 
-extern int hclient_init(hclient_t cln, const char *host, int port);
+extern int hclient_init(hclient_t cln, const char *host, const int cport);
 
 extern void hclient_release(hclient_t cln);
 
